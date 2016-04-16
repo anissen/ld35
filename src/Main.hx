@@ -12,16 +12,12 @@ import luxe.AppConfig;
 import luxe.physics.nape.DebugDraw;
 
 class Main extends luxe.Game {
-        //the debug drawer
     var drawer : DebugDraw;
-
     var cut_start :Vec2;
-
-        //the impulse to apply when pressing arrows
-    var impulse = 900;
-
+    var impulse = 1000;
     var countdown :Float = 1;
-
+    var shapes_cut :Int = 0;
+    var min_countdown :Float = 0.8;
     var shapes :Array<Array<Vec2>>;
 
     override function ready() {
@@ -31,12 +27,12 @@ class Main extends luxe.Game {
         luxe.tween.Actuate.defaultEase = luxe.tween.easing.Quad.easeInOut;
 
         parse_svg();
+        Luxe.physics.nape.space.gravity.setxy(0, 100);
 
         reset_world();
     } //ready
 
     function parse_svg() {
-
         var shapes_file = Luxe.resources.text('assets/shapes/shapes.svg');
         var xml :Xml = Xml.parse(shapes_file.asset.text);
 
@@ -56,23 +52,12 @@ class Main extends luxe.Game {
             }
             for (rect in svg.elementsNamed('rect')) {
                 shapes.push(Polygon.box(Std.parseInt(rect.get('width')), Std.parseInt(rect.get('height'))));
-                // var points = [];
-                // var d = path.get('d');
-                // var coords = d.substr(1, d.length - 2).split('L');
-                // for (coord in coords) {
-                //     var c = coord.split(',');
-                //     points.push(new Vec2(Std.parseInt(c[0]), Std.parseInt(c[1])));
-                //     trace('Point: ' + Std.parseInt(c[0]) + ', ' + Std.parseInt(c[1]));
-                // }
-                // points.pop();
-                // shapes.push(points);
             }
         }
     }
 
     //overriding the built in function to configure the default window
     override function config( config:AppConfig ) : AppConfig {
-
         if(config.user.window != null) {
             if(config.user.window.width != null) {
                 config.window.width = Std.int(config.user.window.width);
@@ -82,11 +67,8 @@ class Main extends luxe.Game {
             }
         }
 
-        // config.preload.textures.push({ id: 'assets/images/tex.png' });
         config.preload.texts.push({ id: 'assets/shapes/shapes.svg' });
-
         config.render.antialiasing = 4;
-
         return config;
 
     } //config
@@ -97,14 +79,14 @@ class Main extends luxe.Game {
             drawer = null;
         }
 
-        //create the drawer, and assign it to the nape debug drawer
         drawer = new DebugDraw();
         Luxe.physics.nape.debugdraw = drawer;
 
-        Luxe.physics.nape.space.gravity.setxy(0, 100);
+        shapes_cut = 0;
     } //reset_world
 
     override function onmouseup( e:MouseEvent ) {
+        // speedup_timer = 0;
         luxe.tween.Actuate.tween( Luxe, 0.3, { timescale: 1 });
         var cut_end = Vec2.get(e.pos.x, e.pos.y);
         var cut_diff = cut_end.sub(cut_start);
@@ -116,12 +98,19 @@ class Main extends luxe.Game {
     		var geomPolyList :nape.geom.GeomPolyList = geomPoly.cut(cut_start, cut_end, true, true);
             if (geomPolyList.length == 0) continue;
 
+            shapes_cut++;
+
             var min_area = 10000.0;
             for (cutGeom in geomPolyList) {
                 var cutBody = new Body(BodyType.DYNAMIC);
-				// cutBody.setShapeMaterials(Material.steel());
 
-				cutBody.shapes.add(new Polygon(cutGeom));
+                var shape = new Polygon(cutGeom);
+                var area = cutGeom.area();
+                min_area = Math.min(area, min_area);
+
+                shape.filter.collisionGroup = 0; // when cut enough
+
+				cutBody.shapes.add(shape);
                 cutBody.align();
 
                 // ignore pieces that are too small
@@ -129,13 +118,14 @@ class Main extends luxe.Game {
 
     			cutBody.space = Luxe.physics.nape.space;
                 cutBody.velocity.set(body.velocity);
-                drawer.add(cutBody);
+                // cutBody.group = null; //new nape.dynamics.InteractionGroup(true);
 
-                // trace('cut area: ' + cutPoly.area);
-                min_area = Math.min(cutGeom.area(), min_area);
+                var active_color = new luxe.Color().rgb(0xf6007b);
+                active_color.a = 0.1; // when cut enough
+                drawer.add(cutBody, active_color);
 
-                var power = 0.3 + 0.4 * Math.random();
-                // apply small random impulse
+
+                var power = 0.4 + 0.6 * Math.random();
     			cutBody.applyImpulse(cut_diff.muleq(power));
             }
 
@@ -150,6 +140,8 @@ class Main extends luxe.Game {
                 textSize: Math.floor(14 + diff * 20)
             });
 
+            Luxe.camera.shake(diff * 10);
+
             drawer.remove(body);
             body.space = null;
         }
@@ -160,7 +152,9 @@ class Main extends luxe.Game {
     } //onmouseup
 
     override function onmousedown( e:MouseEvent ) {
-        luxe.tween.Actuate.tween( Luxe, 0.3, { timescale: 0.1 });
+        var slow_timescale = 0.6;
+        luxe.tween.Actuate.tween(Luxe, 0.3, { timescale: slow_timescale });
+        // speedup_timer = 3 * slow_timescale;
         cut_start = Vec2.get(e.pos.x, e.pos.y);
     } //onmousedown
 
@@ -172,6 +166,7 @@ class Main extends luxe.Game {
                 var body = rayResult.shape.body;
                 if (!body.isDynamic()) continue;
                 if (body.contains(end)) continue;
+                if (body.shapes.at(0).filter.collisionGroup == 0) continue;
                 bodies.push(body);
             }
         }
@@ -181,7 +176,7 @@ class Main extends luxe.Game {
     override function update(dt :Float) {
         countdown -= dt;
         if (countdown <= 0) {
-            countdown = 3;
+            countdown = Math.max(2 - shapes_cut * 0.05, min_countdown);
 
             var box = new Body(BodyType.DYNAMIC);
             var randomShape = shapes[Math.floor(shapes.length * Math.random())];
@@ -199,6 +194,15 @@ class Main extends luxe.Game {
             drawer.add(box);
         }
 
+        // if (speedup_timer > 0) {
+        //     speedup_timer -= dt;
+        // } else {
+        //     Luxe.timescale += dt * 2;
+        //     if (Luxe.timescale > 1) {
+        //         Luxe.timescale = 1;
+        //     }
+        // }
+
         for (body in Luxe.physics.nape.space.bodies) {
             if (body.velocity.y > 0 && body.bounds.min.y > Luxe.screen.h) {
                 trace('body lost!');
@@ -215,18 +219,6 @@ class Main extends luxe.Game {
                 immediate: true
             });
 
-            // var end = Vec2.get(Luxe.screen.cursor.pos.x, Luxe.screen.cursor.pos.y);
-            // var ray = nape.geom.Ray.fromSegment(cut_start, end);
-            // if (ray.maxDistance > 5) {
-            //     for (rayResult in Luxe.physics.nape.space.rayMultiCast(ray)) {
-            //         var body = rayResult.shape.body;
-            //         if (!body.isDynamic()) continue;
-            //         if (body.contains(end)) continue;
-            //         var shape = body.shapes.at(0);
-            //         drawer.geometry[shape].active_color.set(canCut ? 1 : 0, !canCut ? 1 : 0, 0);
-            //         drawer.geometry[shape].inactive_color.set(0, canCut ? 1 : 0, !canCut ? 1 : 0);
-            //     }
-            // }
             for (body in Luxe.physics.nape.space.bodies) {
                 var shape = body.shapes.at(0);
                 drawer.geometry[shape].active_color.set(1, 0, 1);
