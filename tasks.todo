@@ -1,0 +1,7 @@
+
+# To-do
+
+[ ] Put on github
+[ ] Implement simple score for 1 cut geometry
+[ ] Implement lives
+[ ] Move state out of main (merge with oldmain)
