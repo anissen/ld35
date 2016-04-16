@@ -14,10 +14,11 @@ import luxe.physics.nape.DebugDraw;
 class Main extends luxe.Game {
     var drawer : DebugDraw;
     var cut_start :Vec2;
-    var impulse = 1000;
+    var impulse = 900;
     var countdown :Float = 1;
     var shapes_cut :Int = 0;
     var min_countdown :Float = 0.8;
+    var lives :Int;
     var shapes :Array<Array<Vec2>>;
 
     override function ready() {
@@ -83,6 +84,7 @@ class Main extends luxe.Game {
         Luxe.physics.nape.debugdraw = drawer;
 
         shapes_cut = 0;
+        lives = 3;
     } //reset_world
 
     override function onmouseup( e:MouseEvent ) {
@@ -93,22 +95,25 @@ class Main extends luxe.Game {
 
         var bodies = raycast_bodies(cut_start, cut_end);
         for (body in bodies) {
-            var geomPoly = new nape.geom.GeomPoly(body.shapes.at(0).castPolygon.worldVerts);
-            trace('Original area: ' + geomPoly.area());
+            var shape = body.shapes.at(0);
+            var geomPoly = new nape.geom.GeomPoly(shape.castPolygon.worldVerts);
     		var geomPolyList :nape.geom.GeomPolyList = geomPoly.cut(cut_start, cut_end, true, true);
             if (geomPolyList.length == 0) continue;
 
             shapes_cut++;
 
+            var color = drawer.geometry[shape].active_color;
             var min_area = 10000.0;
             for (cutGeom in geomPolyList) {
                 var cutBody = new Body(BodyType.DYNAMIC);
 
                 var shape = new Polygon(cutGeom);
                 var area = cutGeom.area();
+                var area_diff = (area / geomPoly.area());
+                var unfinished_cut = (area_diff < Math.max(1 - shapes_cut * 0.01, 0.6));
                 min_area = Math.min(area, min_area);
 
-                shape.filter.collisionGroup = 0; // when cut enough
+                shape.filter.collisionGroup = (unfinished_cut ? 0 : 1);
 
 				cutBody.shapes.add(shape);
                 cutBody.align();
@@ -120,10 +125,9 @@ class Main extends luxe.Game {
                 cutBody.velocity.set(body.velocity);
                 // cutBody.group = null; //new nape.dynamics.InteractionGroup(true);
 
-                var active_color = new luxe.Color().rgb(0xf6007b);
-                active_color.a = 0.1; // when cut enough
+                var active_color = color.clone();
+                if (unfinished_cut) active_color.a = 0.1;
                 drawer.add(cutBody, active_color);
-
 
                 var power = 0.4 + 0.6 * Math.random();
     			cutBody.applyImpulse(cut_diff.muleq(power));
@@ -152,7 +156,7 @@ class Main extends luxe.Game {
     } //onmouseup
 
     override function onmousedown( e:MouseEvent ) {
-        var slow_timescale = 0.6;
+        var slow_timescale = 0.5;
         luxe.tween.Actuate.tween(Luxe, 0.3, { timescale: slow_timescale });
         // speedup_timer = 3 * slow_timescale;
         cut_start = Vec2.get(e.pos.x, e.pos.y);
@@ -176,7 +180,7 @@ class Main extends luxe.Game {
     override function update(dt :Float) {
         countdown -= dt;
         if (countdown <= 0) {
-            countdown = Math.max(2 - shapes_cut * 0.05, min_countdown);
+            countdown = Math.max(2.5 - shapes_cut * 0.01, min_countdown);
 
             var box = new Body(BodyType.DYNAMIC);
             var randomShape = shapes[Math.floor(shapes.length * Math.random())];
@@ -191,7 +195,15 @@ class Main extends luxe.Game {
             var diff = center.sub(box.position);
             box.applyImpulse(diff.normalise().muleq(impulse));
 
-            drawer.add(box);
+            var color = new luxe.Color.ColorHSL(360 * Math.random(), 1, 0.5);
+            drawer.add(box, color);
+
+            var color2 = color.clone();
+            color2.h = (color2.h + 100) % 360;
+            color2.s = 0.1;
+            color2.l = 0.1;
+            var rgbColor = color2.toColor();
+            Luxe.renderer.clear_color.tween(2.0, { r: rgbColor.r, g: rgbColor.g, b: rgbColor.b });
         }
 
         // if (speedup_timer > 0) {
@@ -204,10 +216,24 @@ class Main extends luxe.Game {
         // }
 
         for (body in Luxe.physics.nape.space.bodies) {
-            if (body.velocity.y > 0 && body.bounds.min.y > Luxe.screen.h) {
-                trace('body lost!');
+            var lost = (body.velocity.y > 0 && body.bounds.min.y > Luxe.screen.h) ||
+                (body.bounds.max.x < 0) || (body.bounds.min.x > Luxe.screen.w);
+            if (lost) {
+                // trace('body lost!');
                 drawer.remove(body);
                 body.space = null;
+
+                if (body.shapes.at(0).filter.collisionGroup != 0) {
+                    lives--;
+                    entities.Notification.Toast({
+                        text: 'Life Lost!',
+                        scene: Luxe.scene,
+                        pos: Luxe.screen.mid.clone(),
+                        color: new luxe.Color(1, 0, 0),
+                        textSize: 34
+                    });
+                    Luxe.camera.shake(10);
+                }
             }
         }
 
@@ -216,19 +242,21 @@ class Main extends luxe.Game {
                 p0: new luxe.Vector(cut_start.x, cut_start.y),
                 p1: Luxe.screen.cursor.pos,
                 color: new luxe.Color(1, 1, 1),
+                depth: 2000,
                 immediate: true
             });
 
             for (body in Luxe.physics.nape.space.bodies) {
                 var shape = body.shapes.at(0);
-                drawer.geometry[shape].active_color.set(1, 0, 1);
-                drawer.geometry[shape].inactive_color.set(0, 1, 1);
+                if (shape.filter.collisionGroup == 0) continue;
+                drawer.geometry[shape].active_color.a = 0.5;
+                drawer.geometry[shape].inactive_color.a = 0.4;
             }
             var hits = raycast_bodies(cut_start, Vec2.get(Luxe.screen.cursor.pos.x, Luxe.screen.cursor.pos.y));
             for (body in hits) {
                 var shape = body.shapes.at(0);
-                drawer.geometry[shape].active_color.set(1, 0, 0);
-                drawer.geometry[shape].inactive_color.set(0, 1, 0);
+                drawer.geometry[shape].active_color.a = 1.0;
+                drawer.geometry[shape].inactive_color.a = 0.7;
             }
         }
     }
