@@ -8,9 +8,6 @@ import luxe.Vector;
 import luxe.Visual;
 import luxe.Color;
 
-import game.ds.MapData;
-import game.ds.GridLayout;
-
 using Lambda;
 
 class PlayState extends State {
@@ -30,7 +27,7 @@ class PlayState extends State {
     function play_sound(sound :String, ?x :Int) {
         var handle = Luxe.audio.play(Luxe.resources.audio('assets/sounds/$sound').source);
         if (x == null) return;
-        Luxe.audio.pan(handle, map_data.layout.get_width() / (x + 1));
+        // Luxe.audio.pan(handle, map_data.layout.get_width() / (x + 1));
     }
 
     override public function onmouseup(event :luxe.Input.MouseEvent) {
@@ -71,7 +68,7 @@ class PlayState extends State {
 
         var particles = new luxe.Particles.ParticleSystem({
             name: 'particles',
-            scene: keepScene
+            // scene: keepScene
         });
         particles.add_emitter(emitter_template);
         emitter = particles.emitters.get('template');

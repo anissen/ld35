@@ -1,71 +1,70 @@
 
-import luxe.Input;
+import luxe.States;
+import luxe.Input.KeyEvent;
+import luxe.Input.Key;
 
-import nape.geom.Vec2;
-import nape.phys.Body;
-import nape.phys.BodyType;
-import nape.shape.Polygon;
-import nape.shape.Circle;
-import nape.constraint.PivotJoint;
+import states.*;
 
-import luxe.AppConfig;
-import luxe.physics.nape.DebugDraw;
+import phoenix.Batcher.BlendMode;
+import phoenix.RenderTexture;
+import phoenix.Texture;
+import phoenix.Batcher;
+import phoenix.Shader;
+import luxe.Sprite;
+import luxe.Vector;
+import luxe.Color;
 
-class Main extends luxe.Game {
-    var drawer : DebugDraw;
-    var cut_start :Vec2;
-    var impulse = 900;
-    var countdown :Float = 1;
-    var shapes_cut :Int = 0;
-    var min_countdown :Float = 0.8;
-    var lives :Int;
-    var shapes :Array<Array<Vec2>>;
-    var cursor_entity :luxe.Entity;
-    // var last_positions :Array<luxe.Vector>;
-    var trail :components.TrailRenderer;
+class PostProcess {
+    var output: RenderTexture;
+    var batch: Batcher;
+    var view: Sprite;
+    public var shader: Shader;
 
-    override function ready() {
-        Luxe.renderer.batcher.on(prerender, function(_) { Luxe.renderer.state.lineWidth(3); });
-        Luxe.renderer.batcher.on(postrender, function(_) { Luxe.renderer.state.lineWidth(1); });
-
-        luxe.tween.Actuate.defaultEase = luxe.tween.easing.Quad.easeInOut;
-
-        parse_svg();
-        Luxe.physics.nape.space.gravity.setxy(0, 100);
-
-        cursor_entity = new luxe.Entity({ name: 'cursor' });
-        trail = new components.TrailRenderer({ name: 'TrailRenderer' });
-        cursor_entity.add(trail);
-
-        reset_world();
-    } //ready
-
-    function parse_svg() {
-        var shapes_file = Luxe.resources.text('assets/shapes/shapes.svg');
-        var xml :Xml = Xml.parse(shapes_file.asset.text);
-
-        shapes = [];
-        for (svg in xml.elementsNamed('svg')) {
-            for (path in svg.elementsNamed('path')) {
-                var points = [];
-                var d = path.get('d');
-                var coords = d.substr(1, d.length - 2).split('L');
-                for (coord in coords) {
-                    var c = coord.split(',');
-                    points.push(new Vec2(Std.parseInt(c[0]), Std.parseInt(c[1])));
-                    trace('Point: ' + Std.parseInt(c[0]) + ', ' + Std.parseInt(c[1]));
-                }
-                points.pop();
-                shapes.push(points);
-            }
-            for (rect in svg.elementsNamed('rect')) {
-                shapes.push(Polygon.box(Std.parseInt(rect.get('width')), Std.parseInt(rect.get('height'))));
-            }
-        }
+    public function new(shader :Shader) {
+        output = new RenderTexture({ id: 'render-to-texture', width: Luxe.screen.w, height: Luxe.screen.h });
+        batch = Luxe.renderer.create_batcher({ no_add: true });
+        this.shader = shader;
+        view = new Sprite({
+            no_scene: true,
+            centered: false,
+            pos: new Vector(0,0),
+            size: Luxe.screen.size,
+            texture: output,
+            shader: shader, //Luxe.renderer.shaders.textured.shader,
+            batcher: batch
+        });
     }
 
-    //overriding the built in function to configure the default window
-    override function config( config:AppConfig ) : AppConfig {
+    public function toggle() {
+        view.shader = (view.shader == shader ? Luxe.renderer.shaders.textured.shader : shader);
+    }
+
+    public function prerender() {
+        Luxe.renderer.target = output;
+        Luxe.renderer.clear(new Color(0,0,0,1));
+    }
+
+    public function postrender() {
+        Luxe.renderer.target = null;
+        Luxe.renderer.clear(new Color(1,0,0,1));
+        Luxe.renderer.blend_mode(BlendMode.src_alpha, BlendMode.zero);
+        batch.draw();
+        Luxe.renderer.blend_mode();
+    }
+}
+
+class Main extends luxe.Game {
+    static public var states :States;
+    var fullscreen :Bool = false;
+    var postprocess :PostProcess;
+
+    override function config(config :luxe.AppConfig) {
+        config.preload.textures.push({ id: 'assets/images/luxe.png' });
+        config.preload.jsons.push({ id: 'assets/particle_systems/fireworks.json' });
+        config.preload.sounds.push({ id: 'assets/sounds/sound.ogg', is_stream: false });
+        config.preload.shaders.push({ id: 'postprocess', frag_id: 'assets/shaders/postprocess.glsl', vert_id: 'default' });
+        config.preload.texts.push({ id: 'assets/shapes/shapes.svg' });
+
         if(config.user.window != null) {
             if(config.user.window.width != null) {
                 config.window.width = Std.int(config.user.window.width);
@@ -75,237 +74,59 @@ class Main extends luxe.Game {
             }
         }
 
-        config.preload.texts.push({ id: 'assets/shapes/shapes.svg' });
         config.render.antialiasing = 4;
         return config;
+    }
 
-    } //config
+    override function ready() {
+        trace('Built ${MacroHelper.CompiledAt()}');
 
-    function reset_world() {
-        Luxe.scene.empty();
+        Luxe.renderer.batcher.on(prerender, function(_) { Luxe.renderer.state.lineWidth(3); });
+        Luxe.renderer.batcher.on(postrender, function(_) { Luxe.renderer.state.lineWidth(1); });
 
-        if(drawer != null) {
-            drawer.destroy();
-            drawer = null;
+        luxe.tween.Actuate.defaultEase = luxe.tween.easing.Quad.easeInOut;
+
+        // Luxe.renderer.clear_color.set(1, 1, 1);
+
+        states = new States({ name: 'state_machine' });
+        // states.add(new MenuState());
+        states.add(new PlayState());
+        states.set(PlayState.StateId);
+
+        var shader = Luxe.resources.shader('postprocess');
+        shader.set_vector2('resolution', Luxe.screen.size);
+        postprocess = new PostProcess(shader);
+        // postprocess.toggle();
+    }
+
+    // Scale camera's viewport accordingly when game is scaled, common and suitable for most games
+	override function onwindowsized(e: luxe.Screen.WindowEvent) {
+        Luxe.camera.viewport = new luxe.Rectangle(0, 0, e.x, e.y);
+    }
+
+    override function onkeyup(e :KeyEvent) {
+        if (e.keycode == Key.enter && e.mod.alt) {
+            fullscreen = !fullscreen;
+            Luxe.snow.runtime.window_fullscreen(fullscreen, true /* true-fullscreen */);
+        } else if (e.keycode == Key.key_s) {
+            postprocess.toggle();
         }
-
-        drawer = new DebugDraw();
-        Luxe.physics.nape.debugdraw = drawer;
-
-        shapes_cut = 0;
-        lives = 3;
-
-        cursor_entity.pos = Luxe.screen.mid.clone();
-        // last_positions = [];
-    } //reset_world
-
-    override function onmouseup(e :MouseEvent) {
-        var cut_end = new Vec2(e.pos.x, e.pos.y);
-
-        Luxe.draw.line({
-            p0: new luxe.Vector(cut_start.x, cut_start.y),
-            p1: e.pos.clone(),
-            color: new luxe.Color(1, 0, 0, 0.1),
-            depth: -1
-        });
-
-        // cursor_entity.remove('TrailRenderer');
-        trail.trailColor.h = 200;
-        trail.maxLength = 100;
-        // speedup_timer = 0;
-        luxe.tween.Actuate.tween( Luxe, 0.3, { timescale: 1 });
-        var cut_diff = cut_end.sub(cut_start);
-
-        var bodies = raycast_bodies(cut_start, cut_end);
-        for (body in bodies) {
-            var shape = body.shapes.at(0);
-            var geomPoly = new nape.geom.GeomPoly(shape.castPolygon.worldVerts);
-    		var geomPolyList :nape.geom.GeomPolyList = geomPoly.cut(cut_start, cut_end, true, true);
-            if (geomPolyList.length == 0) continue;
-
-            shapes_cut++;
-
-            var color = drawer.geometry[shape].active_color;
-            var min_area = 10000.0;
-            for (cutGeom in geomPolyList) {
-                var cutBody = new Body(BodyType.DYNAMIC);
-
-                var shape = new Polygon(cutGeom);
-                var area = cutGeom.area();
-                var area_diff = (area / geomPoly.area());
-                var unfinished_cut = (area_diff < Math.max(0.9 - shapes_cut * 0.005, 0.6));
-                min_area = Math.min(area, min_area);
-
-                shape.filter.collisionGroup = (unfinished_cut ? 0 : 1);
-
-				cutBody.shapes.add(shape);
-                cutBody.align();
-
-                // ignore pieces that are too small
-    			// if (cutBody.bounds.width < 2 && cutBody.bounds.height < 2) continue;
-
-    			cutBody.space = Luxe.physics.nape.space;
-                cutBody.velocity.set(body.velocity);
-                // cutBody.group = null; //new nape.dynamics.InteractionGroup(true);
-
-                var active_color = color.clone();
-                if (unfinished_cut) active_color.a = 0.1;
-                drawer.add(cutBody, active_color);
-
-                var power = 0.4 + 0.6 * Math.random();
-    			cutBody.applyImpulse(cut_diff.muleq(power));
-            }
-
-            var diff = (min_area * geomPolyList.length) / geomPoly.area();
-            var percent_diff = Math.round(diff * 100);
-            entities.Notification.Toast({
-                text: '$percent_diff%',
-                scene: Luxe.scene,
-                pos: new luxe.Vector(body.position.x, body.position.y),
-                color: new luxe.Color(1 - diff, diff, 0),
-                randomRotation: 20,
-                textSize: Math.floor(14 + diff * 20)
-            });
-
-            Luxe.camera.shake(diff * 10);
-
-            drawer.remove(body);
-            body.space = null;
+        #if desktop
+        if (e.keycode == Key.escape) {
+            if (!Luxe.core.shutting_down) Luxe.shutdown();
         }
+        #end
+    }
 
-        cut_start.dispose();
-        cut_start = null;
-        cut_end.dispose();
-    } //onmouseup
-
-    // override function onmousemove(e :MouseEvent) {
-    //     cursor_entity.pos.x += e.xrel;
-    //     cursor_entity.pos.y += e.yrel;
-    // }
-
-    override function onmousedown( e:MouseEvent ) {
-        var slow_timescale = 0.5;
-        luxe.tween.Actuate.tween(Luxe, 0.3, { timescale: slow_timescale });
-        // speedup_timer = 3 * slow_timescale;
-        cut_start = Vec2.get(e.pos.x, e.pos.y);
-        trail.trailColor.h = 20;
-        trail.maxLength = 200;
-
-        // var diff = luxe.Vector.Subtract(trail.points[1], trail.points[0]).normalized;
-        // cursor_entity.pos = diff.multiplyScalar(100);
-        // cut(cut_start.copy(), new Vec2(cursor_entity.pos.x, cursor_entity.pos.y));
-    } //onmousedown
-
-    function raycast_bodies(start :Vec2, end :Vec2) {
-        var ray = nape.geom.Ray.fromSegment(start, end);
-        var bodies = [];
-        if (ray.maxDistance > 5) {
-            for (rayResult in Luxe.physics.nape.space.rayMultiCast(ray)) {
-                var body = rayResult.shape.body;
-                if (!body.isDynamic()) continue;
-                if (body.contains(end)) continue;
-                if (body.shapes.at(0).filter.collisionGroup == 0) continue;
-                bodies.push(body);
-            }
-        }
-        return bodies;
+    override function onprerender() {
+        if (postprocess != null) postprocess.prerender();
     }
 
     override function update(dt :Float) {
-        countdown -= dt;
-        if (countdown <= 0) {
-            countdown = Math.max(2.5 - shapes_cut * 0.01, min_countdown);
-
-            var box = new Body(BodyType.DYNAMIC);
-            var randomShape = shapes[Math.floor(shapes.length * Math.random())];
-            box.shapes.add(new Polygon(randomShape));
-            box.scaleShapes(20, 20);
-            box.mass = 2;
-            box.rotation = Math.PI * 2 * Math.random();
-            box.position.setxy(Luxe.screen.w * Math.random(), (Luxe.screen.h + 200));
-            box.space = Luxe.physics.nape.space;
-
-            var center = new Vec2(Luxe.screen.mid.x, Luxe.screen.mid.y);
-            var diff = center.sub(box.position);
-            box.applyImpulse(diff.normalise().muleq(impulse));
-
-            var color = new luxe.Color.ColorHSL(360 * Math.random(), 1, 0.5);
-            drawer.add(box, color);
-
-            var color2 = color.clone();
-            color2.h = (color2.h + 100) % 360;
-            color2.s = 0.1;
-            color2.l = 0.1;
-            var rgbColor = color2.toColor();
-            Luxe.renderer.clear_color.tween(2.0, { r: rgbColor.r, g: rgbColor.g, b: rgbColor.b });
-        }
-
-        cursor_entity.pos = Luxe.screen.cursor.pos;
-        // trail.maxLength -= dt;
-
-        // if (speedup_timer > 0) {
-        //     speedup_timer -= dt;
-        // } else {
-        //     Luxe.timescale += dt * 2;
-        //     if (Luxe.timescale > 1) {
-        //         Luxe.timescale = 1;
-        //     }
-        // }
-
-        for (body in Luxe.physics.nape.space.bodies) {
-            var lost = (body.velocity.y > 0 && body.bounds.min.y > Luxe.screen.h) ||
-                (body.bounds.max.x < 0) || (body.bounds.min.x > Luxe.screen.w);
-            if (lost) {
-                // trace('body lost!');
-                drawer.remove(body);
-                body.space = null;
-
-                if (body.shapes.at(0).filter.collisionGroup != 0) {
-                    lives--;
-                    entities.Notification.Toast({
-                        text: 'Life Lost!',
-                        scene: Luxe.scene,
-                        pos: Luxe.screen.mid.clone(),
-                        color: new luxe.Color(1, 0, 0),
-                        textSize: 34
-                    });
-                    Luxe.camera.shake(10);
-                }
-            }
-        }
-
-        if (cut_start != null) {
-            Luxe.draw.line({
-                p0: new luxe.Vector(cut_start.x, cut_start.y),
-                p1: Luxe.screen.cursor.pos,
-                color: new luxe.Color(1, 1, 1),
-                depth: 2000,
-                immediate: true
-            });
-
-            for (body in Luxe.physics.nape.space.bodies) {
-                var shape = body.shapes.at(0);
-                if (shape.filter.collisionGroup == 0) continue;
-                drawer.geometry[shape].active_color.a = 0.5;
-                drawer.geometry[shape].inactive_color.a = 0.4;
-            }
-            var hits = raycast_bodies(cut_start, Vec2.get(Luxe.screen.cursor.pos.x, Luxe.screen.cursor.pos.y));
-            for (body in hits) {
-                var shape = body.shapes.at(0);
-                drawer.geometry[shape].active_color.a = 1.0;
-                drawer.geometry[shape].inactive_color.a = 0.7;
-            }
-        }
+        if (postprocess != null) postprocess.shader.set_float('time', Luxe.core.tick_start + dt);
     }
 
-    override function onkeyup( e:KeyEvent ) {
-        if(e.keycode == Key.key_r) {
-            Luxe.physics.nape.space.clear();
-            reset_world();
-        }
-
-        if(e.keycode == Key.key_g) {
-            Luxe.physics.nape.draw = !Luxe.physics.nape.draw;
-        }
-    } //onkeyup
-} //Main
+    override function onpostrender() {
+        if (postprocess != null) postprocess.postrender();
+    }
+}

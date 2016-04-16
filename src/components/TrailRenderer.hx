@@ -37,7 +37,9 @@ class TrailRenderer extends Component {
 	}
 
 	override function onremoved() {
-		Luxe.renderer.batcher.remove(trailGeometry);
+		if (trailGeometry != null) {
+			Luxe.renderer.batcher.remove(trailGeometry);
+		}
 	}
 
 	function cullPoints() {

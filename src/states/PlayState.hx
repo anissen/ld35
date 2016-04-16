@@ -1,0 +1,311 @@
+package states;
+
+import luxe.Input;
+
+import nape.geom.Vec2;
+import nape.phys.Body;
+import nape.phys.BodyType;
+import nape.shape.Polygon;
+import nape.shape.Circle;
+import nape.constraint.PivotJoint;
+
+import luxe.AppConfig;
+import luxe.physics.nape.DebugDraw;
+
+class PlayState extends luxe.States.State {
+    static public var StateId :String = 'PlayState';
+    var drawer : DebugDraw;
+    var cut_start :Vec2;
+    var impulse = 900;
+    var countdown :Float = 1;
+    var shapes_cut :Int = 0;
+    var min_countdown :Float = 0.8;
+    var lives :Int;
+    var shapes :Array<Array<Vec2>>;
+    // var last_positions :Array<luxe.Vector>;
+    var trail :components.TrailRenderer;
+    var cursor_entity :luxe.Entity;
+
+    public function new() {
+        super({ name: StateId });
+    }
+
+    override function init() {
+        parse_svg();
+        Luxe.physics.nape.space.gravity.setxy(0, 100);
+
+        cursor_entity = new luxe.Visual({
+            name: 'cursor',
+            geometry: Luxe.draw.circle({
+                r: 5
+            }),
+            depth: 10
+        });
+        trail = new components.TrailRenderer({ name: 'TrailRenderer' });
+        cursor_entity.add(trail);
+    } //ready
+
+    override function onenter(data) {
+        reset_world();
+    }
+
+    override function onleave(data) {
+        Luxe.scene.empty();
+    }
+
+    function parse_svg() {
+        var shapes_file = Luxe.resources.text('assets/shapes/shapes.svg');
+        var xml :Xml = Xml.parse(shapes_file.asset.text);
+
+        shapes = [];
+        for (svg in xml.elementsNamed('svg')) {
+            for (path in svg.elementsNamed('path')) {
+                var points = [];
+                var d = path.get('d');
+                var coords = d.substr(1, d.length - 2).split('L');
+                for (coord in coords) {
+                    var c = coord.split(',');
+                    points.push(new Vec2(Std.parseInt(c[0]), Std.parseInt(c[1])));
+                    trace('Point: ' + Std.parseInt(c[0]) + ', ' + Std.parseInt(c[1]));
+                }
+                points.pop();
+                shapes.push(points);
+            }
+            for (rect in svg.elementsNamed('rect')) {
+                shapes.push(Polygon.box(Std.parseInt(rect.get('width')), Std.parseInt(rect.get('height'))));
+            }
+        }
+    }
+
+    function reset_world() {
+        Luxe.scene.empty();
+
+        if(drawer != null) {
+            drawer.destroy();
+            drawer = null;
+        }
+
+        drawer = new DebugDraw();
+        Luxe.physics.nape.debugdraw = drawer;
+
+        shapes_cut = 0;
+        lives = 3;
+
+        if (cursor_entity != null) {
+            cursor_entity.pos = Luxe.screen.mid.clone();
+        }
+        // last_positions = [];
+    } //reset_world
+
+    override function onmouseup(e :MouseEvent) {
+        var cut_end = new Vec2(e.pos.x, e.pos.y);
+
+        Luxe.draw.line({
+            p0: new luxe.Vector(cut_start.x, cut_start.y),
+            p1: e.pos.clone(),
+            color: new luxe.Color(1, 0, 0, 0.1),
+            depth: -1
+        });
+
+        // cursor_entity.remove('TrailRenderer');
+        trail.trailColor.h = 200;
+        trail.maxLength = 150;
+        // speedup_timer = 0;
+        luxe.tween.Actuate.tween( Luxe, 0.3, { timescale: 1 });
+        var cut_diff = cut_end.sub(cut_start);
+
+        var bodies = raycast_bodies(cut_start, cut_end);
+        for (body in bodies) {
+            var shape = body.shapes.at(0);
+            var geomPoly = new nape.geom.GeomPoly(shape.castPolygon.worldVerts);
+    		var geomPolyList :nape.geom.GeomPolyList = geomPoly.cut(cut_start, cut_end, true, true);
+            if (geomPolyList.length == 0) continue;
+
+            shapes_cut++;
+
+            var color = drawer.geometry[shape].active_color;
+            var min_area = 10000.0;
+            for (cutGeom in geomPolyList) {
+                var cutBody = new Body(BodyType.DYNAMIC);
+
+                var shape = new Polygon(cutGeom);
+                var area = cutGeom.area();
+                var area_diff = (area / geomPoly.area());
+                var unfinished_cut = (area_diff < Math.max(0.9 - shapes_cut * 0.005, 0.6));
+                min_area = Math.min(area, min_area);
+
+                shape.filter.collisionGroup = (unfinished_cut ? 0 : 1);
+
+				cutBody.shapes.add(shape);
+                cutBody.align();
+
+                // ignore pieces that are too small
+    			// if (cutBody.bounds.width < 2 && cutBody.bounds.height < 2) continue;
+
+    			cutBody.space = Luxe.physics.nape.space;
+                cutBody.velocity.set(body.velocity);
+                // cutBody.group = null; //new nape.dynamics.InteractionGroup(true);
+
+                var active_color = color.clone();
+                if (unfinished_cut) active_color.a = 0.1;
+                drawer.add(cutBody, active_color);
+
+                var power = 0.4 + 0.6 * Math.random();
+    			cutBody.applyImpulse(cut_diff.muleq(power));
+            }
+
+            var diff = (min_area * geomPolyList.length) / geomPoly.area();
+            var percent_diff = Math.round(diff * 100);
+            entities.Notification.Toast({
+                text: '$percent_diff%',
+                scene: Luxe.scene,
+                pos: new luxe.Vector(body.position.x, body.position.y),
+                color: new luxe.Color(1 - diff, diff, 0),
+                randomRotation: 20,
+                textSize: Math.floor(14 + diff * 20)
+            });
+
+            Luxe.camera.shake(diff * 10);
+
+            drawer.remove(body);
+            body.space = null;
+        }
+
+        cut_start.dispose();
+        cut_start = null;
+        cut_end.dispose();
+    } //onmouseup
+
+    // override function onmousemove(e :MouseEvent) {
+    //     cursor_entity.pos.x += e.xrel;
+    //     cursor_entity.pos.y += e.yrel;
+    // }
+
+    override function onmousedown( e:MouseEvent ) {
+        var slow_timescale = 0.5;
+        luxe.tween.Actuate.tween(Luxe, 0.3, { timescale: slow_timescale });
+        // speedup_timer = 3 * slow_timescale;
+        cut_start = Vec2.get(e.pos.x, e.pos.y);
+        trail.trailColor.h = 20;
+        trail.maxLength = 200;
+
+        // var diff = luxe.Vector.Subtract(trail.points[1], trail.points[0]).normalized;
+        // cursor_entity.pos = diff.multiplyScalar(100);
+        // cut(cut_start.copy(), new Vec2(cursor_entity.pos.x, cursor_entity.pos.y));
+    } //onmousedown
+
+    function raycast_bodies(start :Vec2, end :Vec2) {
+        var ray = nape.geom.Ray.fromSegment(start, end);
+        var bodies = [];
+        if (ray.maxDistance > 5) {
+            for (rayResult in Luxe.physics.nape.space.rayMultiCast(ray)) {
+                var body = rayResult.shape.body;
+                if (!body.isDynamic()) continue;
+                if (body.contains(end)) continue;
+                if (body.shapes.at(0).filter.collisionGroup == 0) continue;
+                bodies.push(body);
+            }
+        }
+        return bodies;
+    }
+
+    override function update(dt :Float) {
+        countdown -= dt;
+        if (countdown <= 0) {
+            countdown = Math.max(2.5 - shapes_cut * 0.01, min_countdown);
+
+            var box = new Body(BodyType.DYNAMIC);
+            var randomShape = shapes[Math.floor(shapes.length * Math.random())];
+            box.shapes.add(new Polygon(randomShape));
+            box.scaleShapes(20, 20);
+            box.align();
+            box.mass = 2;
+            box.rotation = Math.PI * 2 * Math.random();
+            box.angularVel = (-5 + 10 * Math.random());
+            box.position.setxy(Luxe.screen.w * Math.random(), (Luxe.screen.h + 200));
+            box.space = Luxe.physics.nape.space;
+
+            var center = new Vec2(Luxe.screen.mid.x, Luxe.screen.mid.y);
+            var diff = center.sub(box.position);
+            box.applyImpulse(diff.normalise().muleq(impulse));
+
+            var color = new luxe.Color.ColorHSL(360 * Math.random(), 1, 0.5);
+            drawer.add(box, color);
+
+            var color2 = color.clone();
+            color2.h = (color2.h + 100) % 360;
+            color2.s = 0.1;
+            color2.l = 0.1;
+            var rgbColor = color2.toColor();
+            Luxe.renderer.clear_color.tween(2.0, { r: rgbColor.r, g: rgbColor.g, b: rgbColor.b });
+        }
+
+        cursor_entity.pos = Luxe.screen.cursor.pos;
+        // trail.maxLength -= dt;
+
+        // if (speedup_timer > 0) {
+        //     speedup_timer -= dt;
+        // } else {
+        //     Luxe.timescale += dt * 2;
+        //     if (Luxe.timescale > 1) {
+        //         Luxe.timescale = 1;
+        //     }
+        // }
+
+        for (body in Luxe.physics.nape.space.bodies) {
+            var lost = (body.velocity.y > 0 && body.bounds.min.y > Luxe.screen.h) ||
+                (body.bounds.max.x < 0) || (body.bounds.min.x > Luxe.screen.w);
+            if (lost) {
+                // trace('body lost!');
+                drawer.remove(body);
+                body.space = null;
+
+                if (body.shapes.at(0).filter.collisionGroup != 0) {
+                    lives--;
+                    entities.Notification.Toast({
+                        text: 'Life Lost!',
+                        scene: Luxe.scene,
+                        pos: Luxe.screen.mid.clone(),
+                        color: new luxe.Color(1, 0, 0),
+                        textSize: 34
+                    });
+                    Luxe.camera.shake(10);
+                }
+            }
+        }
+
+        if (cut_start != null) {
+            Luxe.draw.line({
+                p0: new luxe.Vector(cut_start.x, cut_start.y),
+                p1: Luxe.screen.cursor.pos,
+                color: new luxe.Color(1, 1, 1),
+                depth: 2000,
+                immediate: true
+            });
+
+            for (body in Luxe.physics.nape.space.bodies) {
+                var shape = body.shapes.at(0);
+                if (shape.filter.collisionGroup == 0) continue;
+                drawer.geometry[shape].active_color.a = 0.6;
+                drawer.geometry[shape].inactive_color.a = 0.5;
+            }
+            var hits = raycast_bodies(cut_start, Vec2.get(Luxe.screen.cursor.pos.x, Luxe.screen.cursor.pos.y));
+            for (body in hits) {
+                var shape = body.shapes.at(0);
+                drawer.geometry[shape].active_color.a = 1.0;
+                drawer.geometry[shape].inactive_color.a = 0.7;
+            }
+        }
+    }
+
+    override function onkeyup( e:KeyEvent ) {
+        if(e.keycode == Key.key_r) {
+            Luxe.physics.nape.space.clear();
+            reset_world();
+        }
+
+        if(e.keycode == Key.key_g) {
+            Luxe.physics.nape.draw = !Luxe.physics.nape.draw;
+        }
+    } //onkeyup
+} //Main
