@@ -203,11 +203,29 @@ class Main extends luxe.Game {
                 immediate: true
             });
 
-            // var bodies = raycast_bodies(cut_start, Vec2.get(Luxe.screen.cursor.pos.x, Luxe.screen.cursor.pos.y));
-            // for (body in bodies) {
-            //     drawer.geometry[body].active_color.set(1, 0, 0);
-            //     drawer.geometry[body].inactive_color.set(0, 1, 0);
+            // var end = Vec2.get(Luxe.screen.cursor.pos.x, Luxe.screen.cursor.pos.y);
+            // var ray = nape.geom.Ray.fromSegment(cut_start, end);
+            // if (ray.maxDistance > 5) {
+            //     for (rayResult in Luxe.physics.nape.space.rayMultiCast(ray)) {
+            //         var body = rayResult.shape.body;
+            //         if (!body.isDynamic()) continue;
+            //         if (body.contains(end)) continue;
+            //         var shape = body.shapes.at(0);
+            //         drawer.geometry[shape].active_color.set(canCut ? 1 : 0, !canCut ? 1 : 0, 0);
+            //         drawer.geometry[shape].inactive_color.set(0, canCut ? 1 : 0, !canCut ? 1 : 0);
+            //     }
             // }
+            for (body in Luxe.physics.nape.space.bodies) {
+                var shape = body.shapes.at(0);
+                drawer.geometry[shape].active_color.set(1, 0, 1);
+                drawer.geometry[shape].inactive_color.set(0, 1, 1);
+            }
+            var hits = raycast_bodies(cut_start, Vec2.get(Luxe.screen.cursor.pos.x, Luxe.screen.cursor.pos.y));
+            for (body in hits) {
+                var shape = body.shapes.at(0);
+                drawer.geometry[shape].active_color.set(1, 0, 0);
+                drawer.geometry[shape].inactive_color.set(0, 1, 0);
+            }
         }
     }
 
