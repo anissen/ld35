@@ -25,8 +25,7 @@ class Main extends luxe.Game {
     var shapes :Array<Array<Vec2>>;
 
     override function ready() {
-
-        Luxe.renderer.batcher.on(prerender, function(_) { Luxe.renderer.state.lineWidth(2); });
+        Luxe.renderer.batcher.on(prerender, function(_) { Luxe.renderer.state.lineWidth(3); });
         Luxe.renderer.batcher.on(postrender, function(_) { Luxe.renderer.state.lineWidth(1); });
 
         luxe.tween.Actuate.defaultEase = luxe.tween.easing.Quad.easeInOut;
@@ -34,7 +33,6 @@ class Main extends luxe.Game {
         parse_svg();
 
         reset_world();
-
     } //ready
 
     function parse_svg() {
@@ -116,7 +114,9 @@ class Main extends luxe.Game {
             var geomPoly = new nape.geom.GeomPoly(body.shapes.at(0).castPolygon.worldVerts);
             trace('Original area: ' + geomPoly.area());
     		var geomPolyList :nape.geom.GeomPolyList = geomPoly.cut(cut_start, cut_end, true, true);
+            if (geomPolyList.length == 0) continue;
 
+            var min_area = 10000.0;
             for (cutGeom in geomPolyList) {
                 var cutBody = new Body(BodyType.DYNAMIC);
 				// cutBody.setShapeMaterials(Material.steel());
@@ -125,18 +125,30 @@ class Main extends luxe.Game {
                 cutBody.align();
 
                 // ignore pieces that are too small
-    			if (cutBody.bounds.width < 2 && cutBody.bounds.height < 2) continue;
+    			// if (cutBody.bounds.width < 2 && cutBody.bounds.height < 2) continue;
 
     			cutBody.space = Luxe.physics.nape.space;
                 cutBody.velocity.set(body.velocity);
                 drawer.add(cutBody);
 
                 // trace('cut area: ' + cutPoly.area);
+                min_area = Math.min(cutGeom.area(), min_area);
 
                 var power = 0.3 + 0.4 * Math.random();
                 // apply small random impulse
     			cutBody.applyImpulse(cut_diff.muleq(power));
             }
+
+            var diff = (min_area * geomPolyList.length) / geomPoly.area();
+            var percent_diff = Math.round(diff * 100);
+            entities.Notification.Toast({
+                text: '$percent_diff%',
+                scene: Luxe.scene,
+                pos: new luxe.Vector(body.position.x, body.position.y),
+                color: new luxe.Color(1 - diff, diff, 0),
+                randomRotation: 20,
+                textSize: Math.floor(14 + diff * 20)
+            });
 
             drawer.remove(body);
             body.space = null;
