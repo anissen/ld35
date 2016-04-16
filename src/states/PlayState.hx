@@ -1,6 +1,8 @@
 package states;
 
 import luxe.Input;
+import luxe.Vector;
+import luxe.Color;
 
 import nape.geom.Vec2;
 import nape.phys.Body;
@@ -26,6 +28,12 @@ class PlayState extends luxe.States.State {
     var trail :components.TrailRenderer;
     var cursor_entity :luxe.Entity;
 
+    var particleSystem :luxe.Particles.ParticleSystem;
+    var emitter :luxe.Particles.ParticleEmitter;
+
+    var particleSystem2 :luxe.Particles.ParticleSystem;
+    var emitter2 :luxe.Particles.ParticleEmitter;
+
     public function new() {
         super({ name: StateId });
     }
@@ -43,6 +51,12 @@ class PlayState extends luxe.States.State {
         });
         trail = new components.TrailRenderer({ name: 'TrailRenderer' });
         cursor_entity.add(trail);
+
+        var particle_data1 = Luxe.resources.json('assets/particle_systems/fireworks.json').asset.json;
+        var particle_data2 = Luxe.resources.json('assets/particle_systems/fireflies.json').asset.json;
+        particleSystem = load_particle_system(particle_data1, emitter);
+        particleSystem2 = load_particle_system(particle_data2, emitter2);
+        particleSystem2.start();
     } //ready
 
     override function onenter(data) {
@@ -94,6 +108,10 @@ class PlayState extends luxe.States.State {
         if (cursor_entity != null) {
             cursor_entity.pos = Luxe.screen.mid.clone();
         }
+
+        // if (particleSystem2 != null) {
+        //     particleSystem2.start();
+        // }
         // last_positions = [];
     } //reset_world
 
@@ -156,16 +174,23 @@ class PlayState extends luxe.States.State {
 
             var diff = (min_area * geomPolyList.length) / geomPoly.area();
             var percent_diff = Math.round(diff * 100);
+
+            var pos = new luxe.Vector(body.position.x, body.position.y);
+            particleSystem.pos = pos;
+            particleSystem.start(1);
+
             entities.Notification.Toast({
                 text: '$percent_diff%',
                 scene: Luxe.scene,
-                pos: new luxe.Vector(body.position.x, body.position.y),
+                pos: pos,
                 color: new luxe.Color(1 - diff, diff, 0),
                 randomRotation: 20,
                 textSize: Math.floor(14 + diff * 20)
             });
 
             Luxe.camera.shake(diff * 10);
+            Luxe.events.fire('chroma');
+            // particleSystem.
 
             drawer.remove(body);
             body.space = null;
@@ -241,6 +266,7 @@ class PlayState extends luxe.States.State {
         }
 
         cursor_entity.pos = Luxe.screen.cursor.pos;
+        particleSystem2.pos = Luxe.screen.cursor.pos;
         // trail.maxLength -= dt;
 
         // if (speedup_timer > 0) {
@@ -308,4 +334,40 @@ class PlayState extends luxe.States.State {
             Luxe.physics.nape.draw = !Luxe.physics.nape.draw;
         }
     } //onkeyup
+
+    function load_particle_system(json :Dynamic, emitter :luxe.Particles.ParticleEmitter) :luxe.Particles.ParticleSystem {
+        var emitter_template :luxe.options.ParticleOptions.ParticleEmitterOptions = {
+            // name: 'template',
+            emit_time: json.emit_time,
+            emit_count: json.emit_count,
+            direction: json.direction,
+            direction_random: json.direction_random,
+            speed: json.speed,
+            speed_random: json.speed_random,
+            end_speed: json.end_speed,
+            life: json.life,
+            life_random: json.life_random,
+            rotation: json.zrotation,
+            rotation_random: json.rotation_random,
+            end_rotation: json.end_rotation,
+            end_rotation_random: json.end_rotation_random,
+            rotation_offset: json.rotation_offset,
+            pos_offset: new Vector(json.pos_offset.x, json.pos_offset.y),
+            pos_random: new Vector(json.pos_random.x, json.pos_random.y),
+            gravity: new Vector(json.gravity.x, json.gravity.y),
+            start_size: new Vector(json.start_size.x, json.start_size.y),
+            start_size_random: new Vector(json.start_size_random.x, json.start_size_random.y),
+            end_size: new Vector(json.end_size.x, json.end_size.y),
+            end_size_random: new Vector(json.end_size_random.x, json.end_size_random.y),
+            start_color: new Color(json.start_color.r, json.start_color.g, json.start_color.b, json.start_color.a),
+            end_color: new Color(json.end_color.r, json.end_color.g, json.end_color.b, json.end_color.a)
+        };
+        emitter_template.particle_image = Luxe.resources.texture('assets/images/circle.png');
+
+        var particles = new luxe.Particles.ParticleSystem();
+        particles.add_emitter(emitter_template);
+        emitter = particles.emitters.get(emitter_template.name);
+        particles.stop();
+        return particles;
+    }
 } //Main

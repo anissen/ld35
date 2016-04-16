@@ -57,10 +57,12 @@ class Main extends luxe.Game {
     static public var states :States;
     var fullscreen :Bool = false;
     var postprocess :PostProcess;
+    var chroma :Float = 0;
 
     override function config(config :luxe.AppConfig) {
-        config.preload.textures.push({ id: 'assets/images/luxe.png' });
+        config.preload.textures.push({ id: 'assets/images/circle.png' });
         config.preload.jsons.push({ id: 'assets/particle_systems/fireworks.json' });
+        config.preload.jsons.push({ id: 'assets/particle_systems/fireflies.json' });
         config.preload.sounds.push({ id: 'assets/sounds/sound.ogg', is_stream: false });
         config.preload.shaders.push({ id: 'postprocess', frag_id: 'assets/shaders/postprocess.glsl', vert_id: 'default' });
         config.preload.texts.push({ id: 'assets/shapes/shapes.svg' });
@@ -95,8 +97,13 @@ class Main extends luxe.Game {
 
         var shader = Luxe.resources.shader('postprocess');
         shader.set_vector2('resolution', Luxe.screen.size);
+        shader.set_float('chroma', 0);
         postprocess = new PostProcess(shader);
         // postprocess.toggle();
+
+        Luxe.events.listen('chroma', function(_) {
+            chroma = 1.5;
+        });
     }
 
     // Scale camera's viewport accordingly when game is scaled, common and suitable for most games
@@ -123,7 +130,11 @@ class Main extends luxe.Game {
     }
 
     override function update(dt :Float) {
-        if (postprocess != null) postprocess.shader.set_float('time', Luxe.core.tick_start + dt);
+        if (postprocess != null) {
+            chroma = Math.max(chroma - dt * 0.5, 0);
+            postprocess.shader.set_float('time', Luxe.core.tick_start + dt);
+            postprocess.shader.set_float('chroma', chroma);
+        }
     }
 
     override function onpostrender() {
