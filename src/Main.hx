@@ -20,6 +20,9 @@ class Main extends luxe.Game {
     var min_countdown :Float = 0.8;
     var lives :Int;
     var shapes :Array<Array<Vec2>>;
+    var cursor_entity :luxe.Entity;
+    // var last_positions :Array<luxe.Vector>;
+    var trail :components.TrailRenderer;
 
     override function ready() {
         Luxe.renderer.batcher.on(prerender, function(_) { Luxe.renderer.state.lineWidth(3); });
@@ -29,6 +32,10 @@ class Main extends luxe.Game {
 
         parse_svg();
         Luxe.physics.nape.space.gravity.setxy(0, 100);
+
+        cursor_entity = new luxe.Entity({ name: 'cursor' });
+        trail = new components.TrailRenderer({ name: 'TrailRenderer' });
+        cursor_entity.add(trail);
 
         reset_world();
     } //ready
@@ -75,6 +82,8 @@ class Main extends luxe.Game {
     } //config
 
     function reset_world() {
+        Luxe.scene.empty();
+
         if(drawer != null) {
             drawer.destroy();
             drawer = null;
@@ -85,12 +94,26 @@ class Main extends luxe.Game {
 
         shapes_cut = 0;
         lives = 3;
+
+        cursor_entity.pos = Luxe.screen.mid.clone();
+        // last_positions = [];
     } //reset_world
 
-    override function onmouseup( e:MouseEvent ) {
+    override function onmouseup(e :MouseEvent) {
+        var cut_end = new Vec2(e.pos.x, e.pos.y);
+
+        Luxe.draw.line({
+            p0: new luxe.Vector(cut_start.x, cut_start.y),
+            p1: e.pos.clone(),
+            color: new luxe.Color(1, 0, 0, 0.1),
+            depth: -1
+        });
+
+        // cursor_entity.remove('TrailRenderer');
+        trail.trailColor.h = 200;
+        trail.maxLength = 100;
         // speedup_timer = 0;
         luxe.tween.Actuate.tween( Luxe, 0.3, { timescale: 1 });
-        var cut_end = Vec2.get(e.pos.x, e.pos.y);
         var cut_diff = cut_end.sub(cut_start);
 
         var bodies = raycast_bodies(cut_start, cut_end);
@@ -110,7 +133,7 @@ class Main extends luxe.Game {
                 var shape = new Polygon(cutGeom);
                 var area = cutGeom.area();
                 var area_diff = (area / geomPoly.area());
-                var unfinished_cut = (area_diff < Math.max(1 - shapes_cut * 0.01, 0.6));
+                var unfinished_cut = (area_diff < Math.max(0.9 - shapes_cut * 0.005, 0.6));
                 min_area = Math.min(area, min_area);
 
                 shape.filter.collisionGroup = (unfinished_cut ? 0 : 1);
@@ -155,11 +178,22 @@ class Main extends luxe.Game {
         cut_end.dispose();
     } //onmouseup
 
+    // override function onmousemove(e :MouseEvent) {
+    //     cursor_entity.pos.x += e.xrel;
+    //     cursor_entity.pos.y += e.yrel;
+    // }
+
     override function onmousedown( e:MouseEvent ) {
         var slow_timescale = 0.5;
         luxe.tween.Actuate.tween(Luxe, 0.3, { timescale: slow_timescale });
         // speedup_timer = 3 * slow_timescale;
         cut_start = Vec2.get(e.pos.x, e.pos.y);
+        trail.trailColor.h = 20;
+        trail.maxLength = 200;
+
+        // var diff = luxe.Vector.Subtract(trail.points[1], trail.points[0]).normalized;
+        // cursor_entity.pos = diff.multiplyScalar(100);
+        // cut(cut_start.copy(), new Vec2(cursor_entity.pos.x, cursor_entity.pos.y));
     } //onmousedown
 
     function raycast_bodies(start :Vec2, end :Vec2) {
@@ -205,6 +239,9 @@ class Main extends luxe.Game {
             var rgbColor = color2.toColor();
             Luxe.renderer.clear_color.tween(2.0, { r: rgbColor.r, g: rgbColor.g, b: rgbColor.b });
         }
+
+        cursor_entity.pos = Luxe.screen.cursor.pos;
+        // trail.maxLength -= dt;
 
         // if (speedup_timer > 0) {
         //     speedup_timer -= dt;
