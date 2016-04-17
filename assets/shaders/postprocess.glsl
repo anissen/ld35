@@ -45,9 +45,9 @@ vec4 CalculateFilmGrain(vec4 inputColor, vec2 texCoord) {
 	return inputColor + (noise * FilmGrainAmount);
 }
 
-float ChromaticAberrationInnerAmount = 3.0;
-float ChromaticAberrationOuterAmount = 9.0;
-float ChromaticAberrationCurvePower = 0.4;
+float ChromaticAberrationInnerAmount = 2.0;
+float ChromaticAberrationOuterAmount = 6.0;
+float ChromaticAberrationCurvePower = 0.3;
 
 vec4 CalculateChromaticAberration(sampler2D textureSampler, vec2 texCoord) {
     vec2 dist = (texCoord - 0.5);

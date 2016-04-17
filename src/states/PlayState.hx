@@ -22,11 +22,15 @@ class PlayState extends luxe.States.State {
     var countdown :Float = 1;
     var shapes_cut :Int = 0;
     var min_countdown :Float = 0.8;
-    var lives :Int;
+    var lives :Array<luxe.Sprite>;
     var shapes :Array<Array<Vec2>>;
+    var game_over :Bool;
     // var last_positions :Array<luxe.Vector>;
     var trail :components.TrailRenderer;
     var cursor_entity :luxe.Entity;
+
+    var score :Int;
+    var score_text :luxe.Text;
 
     var particleSystem :luxe.Particles.ParticleSystem;
     var emitter :luxe.Particles.ParticleEmitter;
@@ -50,6 +54,7 @@ class PlayState extends luxe.States.State {
             depth: 10
         });
         trail = new components.TrailRenderer({ name: 'TrailRenderer' });
+        trail.trailColor.a = 0.02;
         cursor_entity.add(trail);
 
         var particle_data1 = Luxe.resources.json('assets/particle_systems/fireworks.json').asset.json;
@@ -80,7 +85,6 @@ class PlayState extends luxe.States.State {
                 for (coord in coords) {
                     var c = coord.split(',');
                     points.push(new Vec2(Std.parseInt(c[0]), Std.parseInt(c[1])));
-                    trace('Point: ' + Std.parseInt(c[0]) + ', ' + Std.parseInt(c[1]));
                 }
                 points.pop();
                 shapes.push(points);
@@ -103,7 +107,27 @@ class PlayState extends luxe.States.State {
         Luxe.physics.nape.debugdraw = drawer;
 
         shapes_cut = 0;
-        lives = 3;
+        game_over = false;
+
+        lives = [];
+        var ui_margin = 75;
+        for (i in 0 ... 3) {
+            var life = new luxe.Sprite({
+                pos: new Vector(ui_margin + i * 75, ui_margin),
+                scale: new Vector(0.5, 0.5),
+                texture: Luxe.resources.texture('assets/images/heart.png')
+            });
+            lives.push(life);
+        }
+
+        score = 0;
+        score_text = new luxe.Text({
+            pos: new Vector(Luxe.screen.w - ui_margin, ui_margin),
+            text: '0',
+            align: luxe.Text.TextAlign.right,
+            point_size: 42,
+            color: new Color(1, 0.0, 0.2)
+        });
 
         if (cursor_entity != null) {
             cursor_entity.pos = Luxe.screen.mid.clone();
@@ -116,6 +140,7 @@ class PlayState extends luxe.States.State {
     } //reset_world
 
     override function onmouseup(e :MouseEvent) {
+        if (game_over) return;
         var cut_end = new Vec2(e.pos.x, e.pos.y);
 
         Luxe.draw.line({
@@ -128,6 +153,7 @@ class PlayState extends luxe.States.State {
         // cursor_entity.remove('TrailRenderer');
         trail.trailColor.h = 200;
         trail.maxLength = 150;
+        trail.trailColor.a = 0.02;
         // speedup_timer = 0;
         luxe.tween.Actuate.tween( Luxe, 0.3, { timescale: 1 });
         var cut_diff = cut_end.sub(cut_start);
@@ -175,6 +201,9 @@ class PlayState extends luxe.States.State {
             var diff = (min_area * geomPolyList.length) / geomPoly.area();
             var percent_diff = Math.round(diff * 100);
 
+            score += percent_diff;
+            score_text.text = '$score';
+
             var pos = new luxe.Vector(body.position.x, body.position.y);
             particleSystem.pos = pos;
             particleSystem.start(1);
@@ -207,12 +236,14 @@ class PlayState extends luxe.States.State {
     // }
 
     override function onmousedown( e:MouseEvent ) {
+        if (game_over) return;
         var slow_timescale = 0.5;
         luxe.tween.Actuate.tween(Luxe, 0.3, { timescale: slow_timescale });
         // speedup_timer = 3 * slow_timescale;
         cut_start = Vec2.get(e.pos.x, e.pos.y);
         trail.trailColor.h = 20;
         trail.maxLength = 200;
+        trail.trailColor.a = 1;
 
         // var diff = luxe.Vector.Subtract(trail.points[1], trail.points[0]).normalized;
         // cursor_entity.pos = diff.multiplyScalar(100);
@@ -235,6 +266,7 @@ class PlayState extends luxe.States.State {
     }
 
     override function update(dt :Float) {
+        if (game_over) return;
         countdown -= dt;
         if (countdown <= 0) {
             countdown = Math.max(2.5 - shapes_cut * 0.01, min_countdown);
@@ -282,12 +314,26 @@ class PlayState extends luxe.States.State {
             var lost = (body.velocity.y > 0 && body.bounds.min.y > Luxe.screen.h) ||
                 (body.bounds.max.x < 0) || (body.bounds.min.x > Luxe.screen.w);
             if (lost) {
-                // trace('body lost!');
                 drawer.remove(body);
                 body.space = null;
 
                 if (body.shapes.at(0).filter.collisionGroup != 0) {
-                    lives--;
+                    var life = lives.pop();
+                    if (life != null) {
+                        life.destroy();
+                    }
+                    if (life == null || lives.length == 0) {
+                        game_over = true;
+                        Luxe.timescale = 0.000001;
+                        entities.Notification.Toast({
+                            text: 'Game over!\nScore: $score\n\nPress any key to restart',
+                            scene: Luxe.scene,
+                            pos: Luxe.screen.mid.clone(),
+                            color: new luxe.Color(1, 0, 0),
+                            textSize: 34
+                        });
+                        return;
+                    }
                     entities.Notification.Toast({
                         text: 'Life Lost!',
                         scene: Luxe.scene,
@@ -325,15 +371,11 @@ class PlayState extends luxe.States.State {
     }
 
     override function onkeyup( e:KeyEvent ) {
-        if(e.keycode == Key.key_r) {
+        if (game_over) {
             Luxe.physics.nape.space.clear();
             reset_world();
         }
-
-        if(e.keycode == Key.key_g) {
-            Luxe.physics.nape.draw = !Luxe.physics.nape.draw;
-        }
-    } //onkeyup
+    }
 
     function load_particle_system(json :Dynamic, emitter :luxe.Particles.ParticleEmitter) :luxe.Particles.ParticleSystem {
         var emitter_template :luxe.options.ParticleOptions.ParticleEmitterOptions = {

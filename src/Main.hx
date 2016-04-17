@@ -61,6 +61,7 @@ class Main extends luxe.Game {
 
     override function config(config :luxe.AppConfig) {
         config.preload.textures.push({ id: 'assets/images/circle.png' });
+        config.preload.textures.push({ id: 'assets/images/heart.png' });
         config.preload.jsons.push({ id: 'assets/particle_systems/fireworks.json' });
         config.preload.jsons.push({ id: 'assets/particle_systems/fireflies.json' });
         config.preload.sounds.push({ id: 'assets/sounds/sound.ogg', is_stream: false });
@@ -102,7 +103,7 @@ class Main extends luxe.Game {
         // postprocess.toggle();
 
         Luxe.events.listen('chroma', function(_) {
-            chroma = 1.5;
+            chroma = 1.25;
         });
     }
 
