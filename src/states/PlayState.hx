@@ -79,6 +79,7 @@ class PlayState extends luxe.States.State {
     }
 
     function reset_world() {
+        luxe.tween.Actuate.reset();
         Luxe.scene.empty();
 
         if(drawer != null) {
@@ -267,12 +268,12 @@ class PlayState extends luxe.States.State {
         if (game_over) return;
         countdown -= dt;
         if (countdown <= 0) {
-            countdown = Math.max(2.5 - shapes_cut * 0.01, min_countdown);
+            countdown = Math.max(2 - shapes_cut * 0.01, min_countdown);
 
             var box = new Body(BodyType.DYNAMIC);
             var randomShape = shapes[Math.floor(shapes.length * Math.random())];
             box.shapes.add(new Polygon(randomShape));
-            box.scaleShapes(20, 20);
+            box.scaleShapes(15 + 10 * Math.random(), 15 + 10 * Math.random());
             box.align();
             box.mass = 2;
             box.rotation = Math.PI * 2 * Math.random();
