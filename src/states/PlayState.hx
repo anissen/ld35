@@ -106,11 +106,11 @@ class PlayState extends luxe.States.State {
 
         score = 0;
         score_text = new luxe.Text({
-            pos: new Vector(Luxe.screen.w - ui_margin, ui_margin),
+            pos: new Vector(Luxe.screen.w - ui_margin, ui_margin - 10),
             text: '0',
             align: luxe.Text.TextAlign.right,
             align_vertical: luxe.Text.TextAlign.top,
-            point_size: 42,
+            point_size: 45,
             color: new Color(1, 0.0, 0.2)
         });
 
@@ -177,6 +177,8 @@ class PlayState extends luxe.States.State {
                 var unfinished_cut = (area_diff < Math.max(0.9 - shapes_cut * 0.005, 0.6));
                 min_area = Math.min(area, min_area);
 
+                if (unfinished_cut) play_sound('glitch.wav', body.position.x);
+
                 shape.filter.collisionGroup = (unfinished_cut ? 0 : 1);
 
 				cutBody.shapes.add(shape);
@@ -207,6 +209,8 @@ class PlayState extends luxe.States.State {
             particleSystem.pos = pos;
             particleSystem.start(1);
 
+            play_sound('slice.wav', pos.x);
+
             entities.Notification.Toast({
                 text: '$percent_diff%',
                 scene: Luxe.scene,
@@ -233,6 +237,11 @@ class PlayState extends luxe.States.State {
     //     cursor_entity.pos.x += e.xrel;
     //     cursor_entity.pos.y += e.yrel;
     // }
+
+    function play_sound(sound :String, ?x :Float) {
+        var handle = Luxe.audio.play(Luxe.resources.audio('assets/sounds/$sound').source);
+        Luxe.audio.pan(handle, x / Luxe.screen.w);
+    }
 
     override function onmousedown( e:MouseEvent ) {
         if (game_over) return;
@@ -268,7 +277,7 @@ class PlayState extends luxe.States.State {
         if (game_over) return;
         countdown -= dt;
         if (countdown <= 0) {
-            countdown = Math.max(2 - shapes_cut * 0.01, min_countdown);
+            countdown = Math.max(2 - shapes_cut * 0.02, min_countdown);
 
             var box = new Body(BodyType.DYNAMIC);
             var randomShape = shapes[Math.floor(shapes.length * Math.random())];
@@ -278,7 +287,8 @@ class PlayState extends luxe.States.State {
             box.mass = 2;
             box.rotation = Math.PI * 2 * Math.random();
             box.angularVel = (-5 + 10 * Math.random());
-            box.position.setxy(Luxe.screen.w * Math.random(), (Luxe.screen.h + 200));
+            var xpos = Luxe.screen.w * Math.random();
+            box.position.setxy(xpos, (Luxe.screen.h + 200));
             box.space = Luxe.physics.nape.space;
 
             var center = new Vec2(Luxe.screen.mid.x, Luxe.screen.mid.y);
@@ -294,6 +304,8 @@ class PlayState extends luxe.States.State {
             color2.l = 0.1;
             var rgbColor = color2.toColor();
             Luxe.renderer.clear_color.tween(2.0, { r: rgbColor.r, g: rgbColor.g, b: rgbColor.b });
+
+            play_sound('spawn.wav', xpos);
         }
 
         cursor_entity.pos = Luxe.screen.cursor.pos;
@@ -331,6 +343,8 @@ class PlayState extends luxe.States.State {
                             color: new luxe.Color(1, 0, 0),
                             textSize: 34
                         });
+                        play_sound('lost.wav', Luxe.screen.mid.x);
+                        Luxe.camera.shake(20);
                         return;
                     }
                     entities.Notification.Toast({
@@ -340,6 +354,7 @@ class PlayState extends luxe.States.State {
                         color: new luxe.Color(1, 0, 0),
                         textSize: 34
                     });
+                    play_sound('lost.wav', Luxe.screen.mid.x);
                     Luxe.camera.shake(10);
                 }
             }
