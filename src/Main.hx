@@ -68,6 +68,11 @@ class Main extends luxe.Game {
         config.preload.jsons.push({ id: 'assets/particle_systems/fireflies.json' });
         config.preload.shaders.push({ id: 'postprocess', frag_id: 'assets/shaders/postprocess.glsl', vert_id: 'default' });
         config.preload.texts.push({ id: 'assets/shapes/shapes.svg' });
+        config.preload.sounds.push({ id: 'assets/sounds/glitch.wav', is_stream: false });
+        config.preload.sounds.push({ id: 'assets/sounds/lost.wav', is_stream: false });
+        config.preload.sounds.push({ id: 'assets/sounds/slice.wav', is_stream: false });
+        config.preload.sounds.push({ id: 'assets/sounds/spawn.wav', is_stream: false });
+        config.preload.sounds.push({ id: 'assets/music/music.ogg', is_stream: true });
 
         if(config.user.window != null) {
             if(config.user.window.width != null) {
@@ -96,7 +101,7 @@ class Main extends luxe.Game {
         states.add(new MenuState());
         states.add(new InfoState());
         states.add(new PlayState());
-        states.set(MenuState.StateId);
+        states.set(PlayState.StateId);
 
         var shader = Luxe.resources.shader('postprocess');
         shader.set_vector2('resolution', Luxe.screen.size);
@@ -105,7 +110,7 @@ class Main extends luxe.Game {
         // postprocess.toggle();
 
         Luxe.events.listen('chroma', function(_) {
-            chroma = 1.25;
+            chroma = 1.3;
         });
     }
 
