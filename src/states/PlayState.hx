@@ -48,6 +48,8 @@ class PlayState extends luxe.States.State {
     } //ready
 
     override function onenter(data) {
+        var handle = Luxe.resources.audio('assets/music/music.ogg').source;
+        Luxe.audio.loop(handle, 0.05);
         reset_world();
     }
 
@@ -174,12 +176,14 @@ class PlayState extends luxe.States.State {
                 var shape = new Polygon(cutGeom);
                 var area = cutGeom.area();
                 var area_diff = (area / geomPoly.area());
-                var unfinished_cut = (area_diff < Math.max(0.9 - shapes_cut * 0.005, 0.6));
+                var finished_cut = (area_diff < Math.max(0.9 - shapes_cut * 0.005, 0.6));
                 min_area = Math.min(area, min_area);
 
-                if (unfinished_cut) play_sound('glitch.wav', body.position.x);
+                if (!finished_cut) {
+                    play_sound('glitch.wav', body.position.x);
+                }
 
-                shape.filter.collisionGroup = (unfinished_cut ? 0 : 1);
+                shape.filter.collisionGroup = (finished_cut ? 0 : 1);
 
 				cutBody.shapes.add(shape);
                 cutBody.align();
@@ -192,7 +196,7 @@ class PlayState extends luxe.States.State {
                 // cutBody.group = null; //new nape.dynamics.InteractionGroup(true);
 
                 var active_color = color.clone();
-                if (unfinished_cut) active_color.a = 0.1;
+                if (finished_cut) active_color.a = 0.1;
                 drawer.add(cutBody, active_color);
 
                 var power = 0.4 + 0.6 * Math.random();
@@ -220,7 +224,7 @@ class PlayState extends luxe.States.State {
                 textSize: Math.floor(14 + diff * 20)
             });
 
-            Luxe.camera.shake(diff * 10);
+            Luxe.camera.shake(diff * 20);
             Luxe.events.fire('chroma');
             // particleSystem.
 
@@ -341,10 +345,11 @@ class PlayState extends luxe.States.State {
                             scene: Luxe.scene,
                             pos: Luxe.screen.mid.clone(),
                             color: new luxe.Color(1, 0, 0),
-                            textSize: 34
+                            textSize: 34,
+                            duration: 20
                         });
                         play_sound('lost.wav', Luxe.screen.mid.x);
-                        Luxe.camera.shake(20);
+                        Luxe.camera.shake(30);
                         return;
                     }
                     entities.Notification.Toast({
@@ -355,7 +360,7 @@ class PlayState extends luxe.States.State {
                         textSize: 34
                     });
                     play_sound('lost.wav', Luxe.screen.mid.x);
-                    Luxe.camera.shake(10);
+                    Luxe.camera.shake(20);
                 }
             }
         }
@@ -386,10 +391,6 @@ class PlayState extends luxe.States.State {
 
     override function onkeyup( e:KeyEvent ) {
         if (game_over) {
-            Luxe.physics.nape.space.clear();
-            reset_world();
-        }
-        if (e.keycode == Key.key_r) {
             Luxe.physics.nape.space.clear();
             reset_world();
         }
