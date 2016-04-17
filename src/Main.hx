@@ -101,7 +101,7 @@ class Main extends luxe.Game {
         states.add(new MenuState());
         states.add(new InfoState());
         states.add(new PlayState());
-        states.set(PlayState.StateId);
+        states.set(MenuState.StateId);
 
         var shader = Luxe.resources.shader('postprocess');
         shader.set_vector2('resolution', Luxe.screen.size);
@@ -112,6 +112,8 @@ class Main extends luxe.Game {
         Luxe.events.listen('chroma', function(_) {
             chroma = 1.3;
         });
+
+        Luxe.snow.runtime.window_grab(true);
     }
 
     // Scale camera's viewport accordingly when game is scaled, common and suitable for most games
