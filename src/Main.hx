@@ -62,9 +62,10 @@ class Main extends luxe.Game {
     override function config(config :luxe.AppConfig) {
         config.preload.textures.push({ id: 'assets/images/circle.png' });
         config.preload.textures.push({ id: 'assets/images/heart.png' });
+        config.preload.textures.push({ id: 'assets/images/logo.png' });
+        config.preload.textures.push({ id: 'assets/images/how_to.png' });
         config.preload.jsons.push({ id: 'assets/particle_systems/fireworks.json' });
         config.preload.jsons.push({ id: 'assets/particle_systems/fireflies.json' });
-        config.preload.sounds.push({ id: 'assets/sounds/sound.ogg', is_stream: false });
         config.preload.shaders.push({ id: 'postprocess', frag_id: 'assets/shaders/postprocess.glsl', vert_id: 'default' });
         config.preload.texts.push({ id: 'assets/shapes/shapes.svg' });
 
@@ -92,9 +93,10 @@ class Main extends luxe.Game {
         // Luxe.renderer.clear_color.set(1, 1, 1);
 
         states = new States({ name: 'state_machine' });
-        // states.add(new MenuState());
+        states.add(new MenuState());
+        states.add(new InfoState());
         states.add(new PlayState());
-        states.set(PlayState.StateId);
+        states.set(MenuState.StateId);
 
         var shader = Luxe.resources.shader('postprocess');
         shader.set_vector2('resolution', Luxe.screen.size);

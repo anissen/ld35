@@ -45,23 +45,6 @@ class PlayState extends luxe.States.State {
     override function init() {
         parse_svg();
         Luxe.physics.nape.space.gravity.setxy(0, 100);
-
-        cursor_entity = new luxe.Visual({
-            name: 'cursor',
-            geometry: Luxe.draw.circle({
-                r: 5
-            }),
-            depth: 10
-        });
-        trail = new components.TrailRenderer({ name: 'TrailRenderer' });
-        trail.trailColor.a = 0.02;
-        cursor_entity.add(trail);
-
-        var particle_data1 = Luxe.resources.json('assets/particle_systems/fireworks.json').asset.json;
-        var particle_data2 = Luxe.resources.json('assets/particle_systems/fireflies.json').asset.json;
-        particleSystem = load_particle_system(particle_data1, emitter);
-        particleSystem2 = load_particle_system(particle_data2, emitter2);
-        particleSystem2.start();
     } //ready
 
     override function onenter(data) {
@@ -125,13 +108,28 @@ class PlayState extends luxe.States.State {
             pos: new Vector(Luxe.screen.w - ui_margin, ui_margin),
             text: '0',
             align: luxe.Text.TextAlign.right,
+            align_vertical: luxe.Text.TextAlign.top,
             point_size: 42,
             color: new Color(1, 0.0, 0.2)
         });
 
-        if (cursor_entity != null) {
-            cursor_entity.pos = Luxe.screen.mid.clone();
-        }
+        cursor_entity = new luxe.Visual({
+            name: 'cursor',
+            geometry: Luxe.draw.circle({
+                r: 5
+            }),
+            depth: 10
+        });
+        cursor_entity.pos = Luxe.screen.mid.clone();
+        trail = new components.TrailRenderer({ name: 'TrailRenderer' });
+        trail.trailColor.a = 0.02;
+        cursor_entity.add(trail);
+
+        var particle_data1 = Luxe.resources.json('assets/particle_systems/fireworks.json').asset.json;
+        var particle_data2 = Luxe.resources.json('assets/particle_systems/fireflies.json').asset.json;
+        particleSystem = load_particle_system(particle_data1, emitter);
+        particleSystem2 = load_particle_system(particle_data2, emitter2);
+        particleSystem2.start();
 
         // if (particleSystem2 != null) {
         //     particleSystem2.start();
@@ -372,6 +370,10 @@ class PlayState extends luxe.States.State {
 
     override function onkeyup( e:KeyEvent ) {
         if (game_over) {
+            Luxe.physics.nape.space.clear();
+            reset_world();
+        }
+        if (e.keycode == Key.key_r) {
             Luxe.physics.nape.space.clear();
             reset_world();
         }
